@@ -1,20 +1,23 @@
 "use client";
 
-import { ArrowRight, BadgePlus, Search, Shield } from "lucide-react";
+import { ArrowRight, Search, Shield, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Role, searchRoles } from "@/lib/roles";
+import { searchUsers } from "@/lib/users";
 
 export function Dashboard() {
   const [total, setTotal] = useState<number | null>(null);
+  const [userTotal, setUserTotal] = useState<number | null>(null);
   const [recent, setRecent] = useState<Role[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    searchRoles("", 1, 5)
-      .then((result) => {
-        setTotal(result.totalCount);
-        setRecent(result.items);
+    Promise.all([searchRoles("", 1, 5), searchUsers("", 1, 1)])
+      .then(([roles, users]) => {
+        setTotal(roles.totalCount);
+        setRecent(roles.items);
+        setUserTotal(users.totalCount);
       })
       .catch((reason: Error) => setError(reason.message));
   }, []);
@@ -39,10 +42,10 @@ export function Dashboard() {
           <p className="mt-6 font-medium text-ink">Tìm gần đúng</p>
           <p className="mt-1 text-sm text-stone-500">Không phân biệt hoa thường và dấu.</p>
         </Link>
-        <Link href="/roles" className="rounded-2xl border border-line bg-white p-5 hover:border-brass">
-          <BadgePlus size={20} className="text-brass" />
-          <p className="mt-6 font-medium text-ink">Thêm vai trò</p>
-          <p className="mt-1 text-sm text-stone-500">Tạo, sửa hoặc xóa ngay trên danh sách.</p>
+        <Link href="/users" className="rounded-2xl border border-line bg-white p-5 hover:border-brass">
+          <Users size={20} className="text-brass" />
+          <p className="mt-6 text-3xl font-semibold text-ink">{userTotal ?? "—"}</p>
+          <p className="mt-1 text-sm text-stone-500">Người dùng</p>
         </Link>
       </div>
 

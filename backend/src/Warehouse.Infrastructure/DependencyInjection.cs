@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Warehouse.Application.Roles;
+using Warehouse.Application.Users;
 using Warehouse.Infrastructure.Persistence;
 using Warehouse.Infrastructure.Services;
 
@@ -14,6 +15,7 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString));
 
         services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IUserService, UserService>();
 
         return services;
     }

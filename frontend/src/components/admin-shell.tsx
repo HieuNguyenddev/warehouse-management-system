@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Search, UserRound, X } from "lucide-react";
+import { Boxes, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Search, UserRound, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { FormEvent, useEffect, useState } from "react";
 const links = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/roles", label: "Vai trò", icon: UserRound },
+  { href: "/users", label: "Người dùng", icon: Users },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
