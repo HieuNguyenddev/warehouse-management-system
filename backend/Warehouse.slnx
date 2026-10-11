@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Warehouse.Domain/Warehouse.Domain.csproj" />
+    <Project Path="src/Warehouse.Application/Warehouse.Application.csproj" />
+    <Project Path="src/Warehouse.Infrastructure/Warehouse.Infrastructure.csproj" />
+    <Project Path="src/Warehouse.Api/Warehouse.Api.csproj" />
+  </Folder>
+</Solution>

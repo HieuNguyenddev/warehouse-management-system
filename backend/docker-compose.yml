@@ -1,0 +1,44 @@
+name: warehouse-backend
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: warehouse-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Warehouse@Dev123"
+    ports:
+      - "1433:1433"
+    volumes:
+      - warehouse-sqlserver:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S 127.0.0.1 -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" || exit 1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+      start_period: 60s
+
+  api:
+    profiles: ["api"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: warehouse-api
+    ports:
+      - "5161:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=WarehouseDb;User Id=sa;Password=Warehouse@Dev123;TrustServerCertificate=True
+      Database__ApplyMigrations: "true"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+volumes:
+  warehouse-sqlserver:
+    name: warehouse-sqlserver

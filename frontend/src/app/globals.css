@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-be-vietnam);
+  --color-ink: #14221c;
+  --color-ink-soft: #24352c;
+  --color-brass: #b08948;
+  --color-brass-soft: #f3e6cf;
+  --color-paper: #f4f0e8;
+  --color-line: #e6dfd2;
+}
+
+body {
+  background: var(--color-paper);
+  color: #1c241f;
+  font-family: var(--font-be-vietnam), sans-serif;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline-color: #b08948;
+}

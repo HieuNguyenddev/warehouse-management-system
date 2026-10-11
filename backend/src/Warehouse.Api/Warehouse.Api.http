@@ -1,0 +1,16 @@
+@Warehouse.Api_HostAddress = http://localhost:5161
+
+GET {{Warehouse.Api_HostAddress}}/api/roles?search=quan ly&page=1&pageSize=10
+Accept: application/json
+
+###
+
+POST {{Warehouse.Api_HostAddress}}/api/roles
+Content-Type: application/json
+
+{
+  "name": "Quản lý kho",
+  "description": "Điều hành kho"
+}
+
+###
