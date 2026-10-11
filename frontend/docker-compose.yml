@@ -1,0 +1,14 @@
+name: warehouse-frontend
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: warehouse-web
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      API_URL: ${API_URL_DOCKER:-http://host.docker.internal:5161}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

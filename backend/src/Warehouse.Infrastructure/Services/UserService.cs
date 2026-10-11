@@ -66,7 +66,7 @@ public class UserService : IUserService
 
     public async Task<UserResponse> CreateAsync(UpsertUserRequest request, CancellationToken cancellationToken)
     {
-        var normalized = Normalize(request);
+        var normalized = Normalize(request, requirePassword: true);
         await EnsureEmailAvailable(normalized.Email, null, cancellationToken);
         await EnsureRoleExists(normalized.RoleId, cancellationToken);
 
@@ -79,6 +79,7 @@ public class UserService : IUserService
             RoleId = normalized.RoleId,
             IsActive = normalized.IsActive
         };
+        user.PasswordHash = Passwords.Hash(user, normalized.Password!);
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken);
@@ -94,7 +95,7 @@ public class UserService : IUserService
             return null;
         }
 
-        var normalized = Normalize(request);
+        var normalized = Normalize(request, requirePassword: false);
         await EnsureEmailAvailable(normalized.Email, id, cancellationToken);
         await EnsureRoleExists(normalized.RoleId, cancellationToken);
 
@@ -103,6 +104,10 @@ public class UserService : IUserService
         user.Phone = normalized.Phone;
         user.RoleId = normalized.RoleId;
         user.IsActive = normalized.IsActive;
+        if (normalized.Password is not null)
+        {
+            user.PasswordHash = Passwords.Hash(user, normalized.Password);
+        }
         await _db.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(user.Id, cancellationToken);
     }
@@ -146,11 +151,12 @@ public class UserService : IUserService
         }
     }
 
-    private static NormalizedUser Normalize(UpsertUserRequest request)
+    private static NormalizedUser Normalize(UpsertUserRequest request, bool requirePassword)
     {
         var fullName = request.FullName?.Trim() ?? string.Empty;
-        var email = request.Email?.Trim() ?? string.Empty;
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
         var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        var password = string.IsNullOrWhiteSpace(request.Password) ? null : request.Password;
 
         if (fullName.Length is 0 or > 150)
         {
@@ -167,8 +173,18 @@ public class UserService : IUserService
             throw new AppException(400, "Số điện thoại tối đa 20 ký tự.");
         }
 
-        return new NormalizedUser(fullName, email, phone, request.RoleId, request.IsActive);
+        if (requirePassword && password is null)
+        {
+            throw new AppException(400, "Mật khẩu là bắt buộc.");
+        }
+
+        if (password is not null && password.Length is < 8 or > 100)
+        {
+            throw new AppException(400, "Mật khẩu từ 8 đến 100 ký tự.");
+        }
+
+        return new NormalizedUser(fullName, email, phone, request.RoleId, request.IsActive, password);
     }
 
-    private sealed record NormalizedUser(string FullName, string Email, string? Phone, Guid? RoleId, bool IsActive);
+    private sealed record NormalizedUser(string FullName, string Email, string? Phone, Guid? RoleId, bool IsActive, string? Password);
 }

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Role, searchRoles } from "@/lib/roles";
 import { User, UserInput, createUser, deleteUser, searchUsers, updateUser } from "@/lib/users";
 
-const emptyForm: UserInput = { fullName: "", email: "", phone: "", roleId: "", isActive: true };
+const emptyForm: UserInput = { fullName: "", email: "", phone: "", roleId: "", isActive: true, password: "" };
 
 export function UserManager() {
   const query = useSearchParams().get("q") ?? "";
@@ -78,6 +78,7 @@ export function UserManager() {
       phone: user.phone ?? "",
       roleId: user.roleId ?? "",
       isActive: user.isActive,
+      password: "",
     });
     setFormError(null);
   }
@@ -312,6 +313,20 @@ export function UserManager() {
                   maxLength={200}
                   value={form.email}
                   onChange={(event) => setForm({ ...form, email: event.target.value })}
+                  className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 font-normal"
+                />
+              </label>
+              <label className="text-sm font-medium text-ink">
+                Mật khẩu
+                <input
+                  type="password"
+                  required={!editing}
+                  minLength={form.password ? 8 : undefined}
+                  maxLength={100}
+                  autoComplete="new-password"
+                  value={form.password}
+                  placeholder={editing ? "Để trống nếu không đổi" : ""}
+                  onChange={(event) => setForm({ ...form, password: event.target.value })}
                   className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 font-normal"
                 />
               </label>

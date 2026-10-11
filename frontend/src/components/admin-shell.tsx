@@ -1,9 +1,11 @@
 "use client";
 
-import { Boxes, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Search, UserRound, Users, X } from "lucide-react";
+import { Boxes, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, UserRound, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { getSession, SessionUser } from "@/lib/api";
+import { logout } from "@/lib/auth";
 
 const links = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
@@ -17,10 +19,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [session, setSession] = useState<SessionUser | null>(null);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem("sidebar-collapsed") === "1");
+    setSession(getSession());
   }, []);
+
+  function signOut() {
+    logout();
+    router.replace("/login");
+  }
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -86,6 +95,18 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className={`py-4 ${collapsed ? "px-2" : "px-3"}`}>
+          <button
+            type="button"
+            onClick={signOut}
+            title={session ? `Đăng xuất ${session.fullName}` : "Đăng xuất"}
+            aria-label="Đăng xuất"
+            className={`mb-1 flex w-full items-center rounded-xl py-2.5 text-sm text-stone-300 hover:bg-white/5 ${
+              collapsed ? "justify-center px-2" : "gap-3 px-3"
+            }`}
+          >
+            <LogOut size={18} />
+            {collapsed ? null : <span className="truncate">{session?.fullName ?? "Đăng xuất"}</span>}
+          </button>
           <button
             type="button"
             onClick={toggleCollapsed}

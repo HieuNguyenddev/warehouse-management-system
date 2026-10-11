@@ -16,7 +16,8 @@ public sealed record UpsertUserRequest(
     string Email,
     string? Phone,
     Guid? RoleId,
-    bool IsActive);
+    bool IsActive,
+    string? Password);
 
 public interface IUserService
 {

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Warehouse.Application.Auth;
 using Warehouse.Application.Roles;
 using Warehouse.Application.Users;
 using Warehouse.Infrastructure.Persistence;
@@ -16,6 +17,7 @@ public static class DependencyInjection
 
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IAuthService, AuthService>();
 
         return services;
     }

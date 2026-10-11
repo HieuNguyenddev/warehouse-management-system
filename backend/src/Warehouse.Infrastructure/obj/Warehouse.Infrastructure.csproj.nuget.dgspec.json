@@ -10,7 +10,7 @@
         "projectUniqueName": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Application/Warehouse.Application.csproj",
         "projectName": "Warehouse.Application",
         "projectPath": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Application/Warehouse.Application.csproj",
-        "packagesPath": "/Users/minhhieu/.nuget/packages/",
+        "packagesPath": "/var/folders/jr/_4_mcy8d7js32yg21j9scwhr0000gn/T/cursor-sandbox-cache/21c4cc48cb7093fec185a3322a174d20/nuget",
         "outputPath": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Application/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
@@ -348,7 +348,7 @@
         "projectUniqueName": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Domain/Warehouse.Domain.csproj",
         "projectName": "Warehouse.Domain",
         "projectPath": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Domain/Warehouse.Domain.csproj",
-        "packagesPath": "/Users/minhhieu/.nuget/packages/",
+        "packagesPath": "/var/folders/jr/_4_mcy8d7js32yg21j9scwhr0000gn/T/cursor-sandbox-cache/21c4cc48cb7093fec185a3322a174d20/nuget",
         "outputPath": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Domain/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
@@ -682,7 +682,7 @@
         "projectUniqueName": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Infrastructure/Warehouse.Infrastructure.csproj",
         "projectName": "Warehouse.Infrastructure",
         "projectPath": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Infrastructure/Warehouse.Infrastructure.csproj",
-        "packagesPath": "/Users/minhhieu/.nuget/packages/",
+        "packagesPath": "/var/folders/jr/_4_mcy8d7js32yg21j9scwhr0000gn/T/cursor-sandbox-cache/21c4cc48cb7093fec185a3322a174d20/nuget",
         "outputPath": "/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Infrastructure/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
@@ -727,6 +727,14 @@
             "Microsoft.EntityFrameworkCore.SqlServer": {
               "target": "Package",
               "version": "[10.0.12, )"
+            },
+            "Microsoft.Extensions.Identity.Core": {
+              "target": "Package",
+              "version": "[10.0.5, )"
+            },
+            "System.IdentityModel.Tokens.Jwt": {
+              "target": "Package",
+              "version": "[8.14.0, )"
             }
           },
           "imports": [

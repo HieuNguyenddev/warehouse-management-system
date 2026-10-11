@@ -1,3 +1,5 @@
+import { api } from "@/lib/api";
+
 export interface User {
   id: string;
   fullName: string;
@@ -22,6 +24,7 @@ export interface UserInput {
   phone: string;
   roleId: string;
   isActive: boolean;
+  password: string;
 }
 
 export function searchUsers(search: string, page: number, pageSize: number) {
@@ -31,25 +34,25 @@ export function searchUsers(search: string, page: number, pageSize: number) {
   });
   const keyword = search.trim();
   if (keyword) params.set("search", keyword);
-  return request<PagedUsers>(`/api/users?${params}`);
+  return api<PagedUsers>(`/api/users?${params}`);
 }
 
 export function createUser(input: UserInput) {
-  return request<User>("/api/users", {
+  return api<User>("/api/users", {
     method: "POST",
     body: JSON.stringify(toBody(input)),
   });
 }
 
 export function updateUser(id: string, input: UserInput) {
-  return request<User>(`/api/users/${id}`, {
+  return api<User>(`/api/users/${id}`, {
     method: "PUT",
     body: JSON.stringify(toBody(input)),
   });
 }
 
 export function deleteUser(id: string) {
-  return request<void>(`/api/users/${id}`, { method: "DELETE" });
+  return api<void>(`/api/users/${id}`, { method: "DELETE" });
 }
 
 function toBody(input: UserInput) {
@@ -60,23 +63,6 @@ function toBody(input: UserInput) {
     phone: phone.length === 0 ? null : phone,
     roleId: input.roleId || null,
     isActive: input.isActive,
+    password: input.password.trim() || null,
   };
-}
-
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(body?.message ?? "Không kết nối được API.");
-  }
-
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
 }

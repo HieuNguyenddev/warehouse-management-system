@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common;
 using Warehouse.Application.Roles;
 
 namespace Warehouse.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/roles")]
 public class RolesController : ControllerBase

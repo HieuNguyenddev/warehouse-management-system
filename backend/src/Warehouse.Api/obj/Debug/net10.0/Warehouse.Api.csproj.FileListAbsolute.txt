@@ -508,3 +508,4 @@
 /Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Api/obj/Debug/net10.0/Warehouse.Api.pdb
 /Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Api/obj/Debug/net10.0/Warehouse.Api.genruntimeconfig.cache
 /Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Api/obj/Debug/net10.0/ref/Warehouse.Api.dll
+/Users/minhhieu/Documents/ASP.NET/Manage-Warehouse/backend/src/Warehouse.Api/bin/Debug/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
