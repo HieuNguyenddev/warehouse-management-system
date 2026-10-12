@@ -1,213 +1,386 @@
 # Backend
 
-API ASP.NET Core trên .NET 10 và SQL Server. Vai trò và người dùng nằm trong database `WarehouseDb`.
+API quản lý vai trò và người dùng. Một project ASP.NET Core Web API trên .NET 10, dữ liệu nằm trong SQL Server, database `WarehouseDb`.
+
+## Cấu trúc thư mục
+
+```text
+backend/
+├── Program.cs
+├── UserManagementAPI.csproj
+├── appsettings.json
+├── appsettings.Development.json
+├── .env.example
+├── Dockerfile
+├── docker-compose.yml
+├── Common/
+│   ├── Dtos/
+│   │   ├── AppException.cs
+│   │   ├── PageRequest.cs
+│   │   ├── PagedResult.cs
+│   │   └── ValidationAttributes.cs
+│   └── Extensions/
+│       ├── EnvFile.cs
+│       └── ServiceCollectionExtensions.cs
+├── Data/
+│   ├── WarehouseDbContext.cs
+│   ├── DbInitializer.cs
+│   └── TextSearch.cs
+├── Modules/
+│   ├── Auth/
+│   │   ├── Controllers/AuthController.cs
+│   │   ├── DTOs/
+│   │   ├── Helpers/
+│   │   ├── Repositories/
+│   │   └── Services/
+│   ├── Roles/
+│   │   ├── Configurations/RoleConfiguration.cs
+│   │   ├── Controllers/RolesController.cs
+│   │   ├── DTOs/
+│   │   ├── Entity/Role.cs
+│   │   ├── Helpers/RoleMapper.cs
+│   │   ├── Repositories/
+│   │   └── Services/
+│   └── Users/
+│       ├── Configurations/UserConfiguration.cs
+│       ├── Controllers/UsersController.cs
+│       ├── DTOs/
+│       ├── Entity/User.cs
+│       ├── Helpers/UserMapper.cs
+│       ├── Repositories/
+│       └── Services/
+├── Migrations/
+├── Properties/launchSettings.json
+├── Tools/
+└── wwwroot/
+    ├── admin/
+    ├── uploads/
+    └── models/
+```
+
+`Auth` không có bảng riêng nên không có `Entity` và `Configurations`.
+
+## Nguyên lý hoạt động
+
+Lúc khởi động, API nạp cấu hình, nối database, tạo tài khoản admin nếu chưa có, rồi mới mở cổng.
+
+```mermaid
+flowchart TD
+  start["dotnet run"] --> env["EnvFile đọc backend/.env"]
+  env --> program["Program.cs dựng CORS, JWT, DbContext"]
+  program --> init["DbInitializer"]
+  init --> migrate{"Database:ApplyMigrations"}
+  migrate -->|true| tables["Tạo hoặc cập nhật bảng"]
+  migrate -->|false| seed["Tạo vai trò admin và tài khoản seed"]
+  tables --> seed
+  seed --> listen["Lắng nghe http://localhost:5161"]
+```
+
+Một request đã vào cổng đi theo một chiều. Controller không viết SQL. Service không trả mã HTTP. Repository không quyết định câu lỗi nghiệp vụ.
+
+```mermaid
+flowchart TD
+  client["Next.js hoặc curl"] --> gate{"Có Bearer token?"}
+  gate -->|POST /api/auth/login| auth["AuthController"]
+  gate -->|API còn lại, token hợp lệ| ctrl["RolesController hoặc UsersController"]
+  gate -->|thiếu hoặc token hỏng| deny["401"]
+  auth --> authSvc["AuthService"]
+  ctrl --> svc["RoleService hoặc UserService"]
+  authSvc --> authRepo["AuthRepository"]
+  svc --> repo["RoleRepository hoặc UserRepository"]
+  authRepo --> db["WarehouseDbContext"]
+  repo --> db
+  db --> sql["SQL Server: Roles, Users"]
+```
+
+Ví dụ `POST /api/auth/login`:
+
+1. `EnvFile` đã nạp `.env` trước khi host dựng. `Program.cs` kiểm tra khóa JWT dài ít nhất 32 byte.
+2. `AuthController` nhận body. ASP.NET chạy attribute trên `LoginRequest`. Email sai hoặc mật khẩu ngắn hơn 8 ký tự thì trả `400` ngay, chưa vào service.
+3. `AuthService` gọi `AuthRepository` tìm người dùng theo email, kiểm tra `IsActive`, rồi so mật khẩu với `PasswordHash`.
+4. Sai email, sai mật khẩu, hoặc tài khoản tắt đều trả cùng một câu: "Email hoặc mật khẩu không đúng."
+5. Đúng thì ký JWT. Token mang `sub`, email, họ tên và tên vai trò.
+6. Controller trả `200` với token và `UserSession`.
+
+Các API còn lại đi cùng lối: controller gọi service, service kiểm tra quy tắc, repository chạy câu SQL. Danh sách thêm `PageRequest` để chỉnh số trang và `TextSearch` để đổi từ khóa thành mẫu `LIKE` không phân biệt hoa thường và dấu.
+
+## Nhiệm vụ từng thư mục và từng file
+
+### Gốc project
+
+| File | Nhiệm vụ |
+| --- | --- |
+| `Program.cs` | Ghép ứng dụng: nạp `.env`, bật controller, CORS, OpenAPI, JWT, đăng ký service, seed lúc khởi động, phục vụ `wwwroot`. |
+| `UserManagementAPI.csproj` | Khai báo .NET 10 và các gói NuGet: JWT, OpenAPI, EF Core SQL Server. |
+| `appsettings.json` | Mức log và chuỗi kết nối dự phòng. Giá trị trong `.env` ghi đè file này. |
+| `appsettings.Development.json` | Mức log khi môi trường là Development. |
+| `.env.example` | Mẫu biến môi trường. Sao chép thành `.env`. |
+| `Dockerfile` | Build và chạy API trong image `aspnet:10.0`, cổng 8080. |
+| `docker-compose.yml` | Service SQL Server. Profile `api` thêm container API, đợi SQL khỏe rồi tự áp migration. |
+| `Properties/launchSettings.json` | Profile `http` mở `http://localhost:5161`. Profile `https` thêm cổng 7110. |
+
+### `Common`
+
+Dùng chung, không gắn một nghiệp vụ.
+
+| File | Nhiệm vụ |
+| --- | --- |
+| `Dtos/AppException.cs` | Lỗi nghiệp vụ kèm mã HTTP. Controller bắt exception này và trả `{ "message" }`. |
+| `Dtos/PageRequest.cs` | Đưa `page` nhỏ hơn 1 về 1. `pageSize` nhỏ hơn 1 thành 10, lớn hơn 100 thành 100. |
+| `Dtos/PagedResult.cs` | Kết quả một trang: `items`, `page`, `pageSize`, `totalCount`, `totalPages`. |
+| `Dtos/ValidationAttributes.cs` | `NotBlank` cấm chuỗi trống. `OptionalPassword` cho phép bỏ trống, có chữ thì 8–100 ký tự. `OptionalPhone` cho phép bỏ trống, có chữ thì đúng dạng số và tối đa 20 ký tự. |
+| `Extensions/EnvFile.cs` | Đọc `.env` từ thư mục hiện tại hoặc thư mục chứa file chạy, lần lên tối đa 6 cấp. Biến đã có trong môi trường được giữ nguyên. |
+| `Extensions/ServiceCollectionExtensions.cs` | `AddWarehouseServices` đăng ký `WarehouseDbContext` và toàn bộ repository, service. |
+
+### `Data`
+
+Nối SQL Server. Không chứa quy tắc của một màn hình.
+
+| File | Nhiệm vụ |
+| --- | --- |
+| `WarehouseDbContext.cs` | Hai `DbSet`: `Roles` và `Users`. Nạp mọi `IEntityTypeConfiguration` trong assembly. |
+| `DbInitializer.cs` | Nếu `Database:ApplyMigrations` là `true` thì cập nhật bảng. Luôn bảo đảm có vai trò `admin` và tài khoản seed. Tài khoản đã có mật khẩu thì không bị ghi đè. |
+| `TextSearch.cs` | Đổi từ khóa thành `%từ khóa%`, thoát `%`, `_`, `[`. Collation `Latin1_General_100_CI_AI` nên `quan ly` khớp `Quản lý`. |
+
+### `Modules/Auth`
+
+Đăng nhập và mật khẩu. Không có bảng riêng. Chi tiết: [Auth](Modules/Auth/README.md).
+
+| File | Nhiệm vụ |
+| --- | --- |
+| `Controllers/AuthController.cs` | `POST /api/auth/login` để mở. `GET /api/auth/me` cần token, đọc claim `sub`. |
+| `DTOs/LoginRequest.cs` | Body đăng nhập: email bắt buộc tối đa 200 ký tự, mật khẩu 8–100 ký tự. |
+| `DTOs/JwtTokenDto.cs` | `token`, `expiresAt`, `tokenType` là `Bearer`. |
+| `DTOs/LoginResponse.cs` | Token kèm `UserSession`. |
+| `DTOs/UserSession.cs` | Id, họ tên, email, tên vai trò. Không có mật khẩu. |
+| `Helpers/Passwords.cs` | Băm một chiều bằng `PasswordHasher` để kiểm tra lúc đăng nhập. |
+| `Helpers/PasswordVault.cs` | Mã hóa AES để admin xem lại mật khẩu. Khóa là SHA-256 của `Jwt:SigningKey`. |
+| `Repositories/IAuthRepository.cs` | Hợp đồng tìm người dùng theo email hoặc theo id còn hoạt động, kèm vai trò. |
+| `Repositories/AuthRepository.cs` | Hiện thực hai câu tìm đó trên bảng `Users`. |
+| `Services/IAuthService.cs` | Hợp đồng đăng nhập và lấy phiên hiện tại. |
+| `Services/AuthService.cs` | So mật khẩu, ký JWT. Hết hạn mặc định 480 phút, tối thiểu 5 phút. |
+
+### `Modules/Roles`
+
+Chi tiết: [Roles](Modules/Roles/README.md).
+
+| File | Nhiệm vụ |
+| --- | --- |
+| `Entity/Role.cs` | `Id`, `Name`, `Description`. |
+| `Configurations/RoleConfiguration.cs` | Bảng `Roles`. `Name` bắt buộc, tối đa 150, không trùng. `Description` tối đa 500. |
+| `DTOs/UpsertRoleRequest.cs` | Body tạo và sửa vai trò. |
+| `DTOs/RoleResponse.cs` | JSON một vai trò trả về. |
+| `Helpers/RoleMapper.cs` | Dựng `RoleResponse` sau khi đã lưu. Không dùng bên trong câu truy vấn EF. |
+| `Repositories/IRoleRepository.cs` | Hợp đồng tìm, xem, kiểm tra trùng tên, thêm, xóa, lưu. |
+| `Repositories/RoleRepository.cs` | Câu SQL của vai trò, gồm tìm kiếm không phân biệt dấu. |
+| `Services/IRoleService.cs` | Hợp đồng CRUD. Không thấy bản ghi thì xem và sửa trả `null`, xóa trả `false`. |
+| `Services/RoleService.cs` | Cắt khoảng trắng, cấm tên rỗng hoặc dài quá 150, cấm mô tả dài quá 500, cấm trùng tên. |
+| `Controllers/RolesController.cs` | `/api/roles`. Mọi action cần token. Không thấy vai trò thì `404`. Xóa xong thì `204`. |
+
+### `Modules/Users`
+
+Chi tiết: [Users](Modules/Users/README.md).
+
+| File | Nhiệm vụ |
+| --- | --- |
+| `Entity/User.cs` | Hồ sơ, `PasswordHash`, `PasswordReveal`, `RoleId`, `IsActive`. `IsActive` mặc định `true`. |
+| `Configurations/UserConfiguration.cs` | Bảng `Users`. Email không trùng. Xóa vai trò thì `RoleId` thành null, người dùng còn. |
+| `DTOs/UserWriteRequest.cs` | Phần chung của tạo và sửa: họ tên, email, điện thoại, `roleId`, `isActive`. `CreateUserRequest` bắt buộc mật khẩu. `UpdateUserRequest` cho phép bỏ trống mật khẩu. |
+| `DTOs/UserResponse.cs` | Hồ sơ trả cho danh sách và màn sửa. Có `hasPassword`, không có mật khẩu. |
+| `DTOs/UserPasswordResponse.cs` | Một trường `password` cho đường xem mật khẩu. |
+| `Helpers/UserMapper.cs` | Dựng `UserResponse` sau khi đã lưu. Danh sách hiện chiếu thẳng trong câu SQL, không đi qua mapper này. |
+| `Repositories/IUserRepository.cs` | Hợp đồng tìm, xem, kiểm tra trùng email, thêm, xóa, lưu. |
+| `Repositories/UserRepository.cs` | Câu SQL của người dùng. Tìm trên họ tên, email, điện thoại và tên vai trò. |
+| `Services/IUserService.cs` | Hợp đồng CRUD cộng thêm `GetPasswordAsync`. |
+| `Services/UserService.cs` | Chuẩn hóa email về chữ thường, cấm trùng email, cấm `roleId` không tồn tại, ghi cả hash và bản mã hóa khi có mật khẩu mới. |
+| `Controllers/UsersController.cs` | `/api/users`. Tạo người dùng, xem mật khẩu, và sửa khi body có mật khẩu mới chỉ chạy khi claim vai trò là `admin`. Không phải admin thì `403`. |
+
+### `Migrations`
+
+EF Core ghi lịch sử bảng. File `*.Designer.cs` và `WarehouseDbContextModelSnapshot.cs` do công cụ sinh, dùng để so model lần sau. Không sửa tay.
+
+| File | Việc đã làm |
+| --- | --- |
+| `20261011170323_AddRoles.cs` | Tạo bảng `Roles`. |
+| `20261011170323_AddRoles.Designer.cs` | Model EF tại thời điểm migration đó. |
+| `20261011180713_AddUsers.cs` | Tạo bảng `Users`. |
+| `20261011180713_AddUsers.Designer.cs` | Model EF tại thời điểm migration đó. |
+| `20261011182459_AddUserPassword.cs` | Thêm cột `PasswordHash`. |
+| `20261011182459_AddUserPassword.Designer.cs` | Model EF tại thời điểm migration đó. |
+| `20261011185655_AddPasswordReveal.cs` | Thêm cột `PasswordReveal`. |
+| `20261011185655_AddPasswordReveal.Designer.cs` | Model EF tại thời điểm migration đó. |
+| `WarehouseDbContextModelSnapshot.cs` | Model hiện tại. `dotnet ef migrations add` so file này với code để sinh migration mới. |
+
+### `Tools` và `wwwroot`
+
+`Tools` để dành cho tiện ích chạy tay. Hiện chưa có lệnh nào.
+
+`wwwroot` là file tĩnh do ASP.NET phục vụ. `admin` nhận bản build giao diện. `uploads` chứa file tải lên lúc chạy. `models` chứa trọng số nhận diện khuôn mặt. Ba thư mục này đang trống.
+
+## Một request đi qua đâu
+
+Các bước của `POST /api/auth/login` và sơ đồ cả luồng nằm ở [Nguyên lý hoạt động](#nguyên-lý-hoạt-động). Danh sách vai trò và người dùng thêm `PageRequest` để chỉnh số trang và `TextSearch` để tìm không phân biệt hoa thường và dấu.
+
+## Ba nghiệp vụ
+
+### Đăng nhập
+
+| Việc | Chỗ trong code |
+| --- | --- |
+| Body email và mật khẩu | `Modules/Auth/DTOs/LoginRequest.cs` |
+| Token và phiên đăng nhập | `JwtTokenDto`, `LoginResponse`, `UserSession` |
+| So mật khẩu, ký JWT | `Modules/Auth/Services/AuthService.cs` |
+| Tạo admin mặc định | `Data/DbInitializer.cs` |
+| `POST /api/auth/login`, `GET /api/auth/me` | `Modules/Auth/Controllers/AuthController.cs` |
+
+Sai email, sai mật khẩu, hoặc tài khoản bị tắt đều trả cùng một câu: "Email hoặc mật khẩu không đúng."
+
+Lúc API khởi động, `DbInitializer` bảo đảm có vai trò tên `admin` và tài khoản trong `.env`. Mặc định là `admin@kho.local` / `Admin@123`. Nếu tài khoản đã có mật khẩu thì mật khẩu đó không bị ghi đè.
+
+### Vai trò
+
+| Việc | Chỗ trong code |
+| --- | --- |
+| Thực thể, DTO, repository, service | `Modules/Roles` |
+| `/api/roles` | `Modules/Roles/Controllers/RolesController.cs` |
+
+Tên vai trò dài tối đa 150 ký tự, mô tả tối đa 500. Trùng tên trả `409`. Xóa một vai trò thì người dùng đang giữ vai trò đó bị bỏ `RoleId`, người dùng không bị xóa.
+
+### Người dùng
+
+| Việc | Chỗ trong code |
+| --- | --- |
+| Thực thể, DTO, repository, service | `Modules/Users` |
+| Hash và mã hóa mật khẩu | `Modules/Auth/Helpers/Passwords.cs`, `Modules/Auth/Helpers/PasswordVault.cs` |
+| `/api/users` | `Modules/Users/Controllers/UsersController.cs` |
+
+Mỗi mật khẩu được lưu hai lần:
+
+- `PasswordHash` dùng để đăng nhập. Đây là bản băm một chiều.
+- `PasswordReveal` là bản mã hóa để vai trò `admin` xem lại chữ mật khẩu.
+
+Tạo người dùng bắt buộc có mật khẩu 8–100 ký tự. Sửa mà để trống mật khẩu thì mật khẩu cũ được giữ. Chỉ vai trò `admin` được tạo người dùng, xem mật khẩu và đặt lại mật khẩu. Danh sách người dùng không trả mật khẩu, chỉ trả `hasPassword`.
+
+## Danh sách API
+
+Mọi đường dẫn trừ đăng nhập đều cần header `Authorization: Bearer <token>`.
+
+| Method | Đường dẫn | Kết quả |
+| --- | --- | --- |
+| `POST` | `/api/auth/login` | Token và thông tin người đăng nhập. |
+| `GET` | `/api/auth/me` | Phiên hiện tại. |
+| `GET` | `/api/roles?search=&page=1&pageSize=10` | Trang vai trò. |
+| `GET` | `/api/roles/{id}` | Một vai trò, hoặc `404`. |
+| `POST` | `/api/roles` | Tạo vai trò. Body `name`, `description`. |
+| `PUT` | `/api/roles/{id}` | Sửa vai trò. |
+| `DELETE` | `/api/roles/{id}` | Xóa vai trò, trả `204`. |
+| `GET` | `/api/users?search=&page=1&pageSize=10` | Trang người dùng. |
+| `GET` | `/api/users/{id}` | Một người dùng, hoặc `404`. |
+| `GET` | `/api/users/{id}/password` | Mật khẩu, chỉ vai trò `admin`. |
+| `POST` | `/api/users` | Tạo người dùng, chỉ `admin`. |
+| `PUT` | `/api/users/{id}` | Sửa hồ sơ. Gửi `password` thì chỉ `admin` được đặt lại. |
+| `DELETE` | `/api/users/{id}` | Xóa người dùng, trả `204`. |
+
+`page` nhỏ hơn 1 được đưa về 1. `pageSize` nhỏ hơn 1 được đưa về 10, lớn hơn 100 bị cắt còn 100.
+
+Lỗi trả JSON một trường:
+
+```json
+{ "message": "Email đã tồn tại." }
+```
+
+`400` là dữ liệu không hợp lệ. `401` là chưa đăng nhập hoặc token hỏng. `403` là đã đăng nhập nhưng không phải admin. `404` là không thấy bản ghi. `409` là trùng tên vai trò hoặc trùng email.
 
 ## Cài đặt
 
-Cài hai phần mềm:
+Cần hai phần mềm:
 
-1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) và bật Docker trước khi chạy Compose.
-2. [.NET SDK 10](https://dotnet.microsoft.com/download) nếu muốn chạy API trên máy, hoặc tạo migration mới.
-
-Kiểm tra:
+1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) để chạy SQL Server.
+2. [.NET SDK 10](https://dotnet.microsoft.com/download) để chạy API trên máy.
 
 ```bash
 docker info
 dotnet --version
-```
-
-Công cụ migration chỉ cần khi chạy API trên máy, không cần khi API chạy trong container:
-
-```bash
 dotnet tool install --global dotnet-ef
 ```
 
-Tạo file môi trường từ mẫu. Compose và `dotnet run` đều đọc `backend/.env`.
+`dotnet-ef` chỉ cần khi tự áp migration trên máy. API chạy trong Docker thì không cần công cụ này.
 
 ```bash
 cd backend
 cp .env.example .env
 ```
 
-Mật khẩu SQL Server mặc định là `Warehouse@Dev123`, user `sa`, database `WarehouseDb`. Máy Apple Silicon chạy image SQL Server qua lớp giả lập `linux/amd64`, nên lần đầu tải image và khởi động chậm.
+SQL Server dùng user `sa`, mật khẩu `Warehouse@Dev123`, database `WarehouseDb`. Máy Apple Silicon chạy image SQL Server qua lớp `linux/amd64`, lần đầu sẽ chậm.
 
-## Biến môi trường
+## Chạy API trên máy
 
-| Biến | Việc |
-| --- | --- |
-| `MSSQL_SA_PASSWORD` | Mật khẩu user `sa`. Compose đưa vào container SQL Server. |
-| `MSSQL_PORT` | Cổng SQL Server trên máy. Mặc định `1433`. |
-| `API_HTTP_PORT` | Cổng API trên máy khi chạy trong Docker. Mặc định `5161`. |
-| `MSSQL_DATABASE` | Tên database. Mặc định `WarehouseDb`. |
-| `ConnectionStrings__DefaultConnection` | Chuỗi kết nối khi API chạy bằng `dotnet run`. Trỏ `localhost`. |
-| `Database__ApplyMigrations` | `true` thì API tự tạo bảng lúc khởi động. Trên máy để `false` và chạy `database update`. |
-| `Cors__Origins` | Origin được gọi API trực tiếp từ trình duyệt. Nhiều origin cách nhau bằng dấu phẩy. |
-
-Trong container API, Compose ghi đè chuỗi kết nối: host là `sqlserver`, không phải `localhost`, và bật `Database__ApplyMigrations=true`.
-
-## Chỉ SQL Server
-
-Dùng khi API chạy bằng `dotnet run` trên máy. Compose không dựng API.
+SQL Server nằm trong Docker. API chạy bằng `dotnet run`.
 
 ```bash
 cd backend
 docker compose up -d
+dotnet ef database update
+dotnet run --launch-profile http
 ```
 
-`docker compose up -d` chỉ bật SQL Server trống, chưa có database `WarehouseDb` hay các bảng.
+`docker compose up -d` chỉ bật SQL Server trống. `database update` tạo bảng từ các file trong `Migrations`. Bỏ qua bước này thì API vẫn mở cổng, nhưng gọi vai trò hoặc người dùng sẽ lỗi vì chưa có bảng.
 
-## API trên máy
-
-Lệnh `database update` đọc migration trong `src/Warehouse.Infrastructure/Persistence/Migrations` và tạo các bảng. Bỏ qua bước này thì API vẫn chạy, nhưng gọi `/api/roles` hoặc `/api/users` sẽ lỗi vì bảng chưa tồn tại.
-
-Đứng ở `backend` thì giữ nguyên `src/Warehouse.Api`. Chỉ bỏ đường dẫn đó khi đã `cd` vào đúng thư mục project.
+Migration mới, đứng ở thư mục `backend`:
 
 ```bash
-cd backend
-dotnet ef database update -p src/Warehouse.Infrastructure -s src/Warehouse.Api
-dotnet run --project src/Warehouse.Api --launch-profile http
+dotnet ef migrations add TenMigration
 ```
 
-API: [http://localhost:5161/api/roles](http://localhost:5161/api/roles)  
-OpenAPI: [http://localhost:5161/openapi/v1.json](http://localhost:5161/openapi/v1.json)  
-HTTPS thêm: [https://localhost:7110](https://localhost:7110)
+API: [http://localhost:5161](http://localhost:5161)  
+OpenAPI khi đang Development: [http://localhost:5161/openapi/v1.json](http://localhost:5161/openapi/v1.json)
 
-`dotnet run` nạp `.env` ở thư mục `backend` trước `appsettings.json`. Biến đã export trong shell không bị file này ghi đè.
+Đăng nhập thử:
 
-## API và SQL Server trong Docker
+```bash
+curl -X POST http://localhost:5161/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@kho.local","password":"Admin@123"}'
+```
 
-Profile `api` mới dựng container backend. Service `api` chờ SQL Server khỏe rồi mới chạy, và tự áp migration.
+## Chạy bằng Docker
+
+Profile `api` dựng thêm container API. Container này đợi SQL Server khỏe, rồi tự áp migration.
 
 ```bash
 cd backend
 docker compose --profile api up -d --build
-```
-
-API vẫn là [http://localhost:5161/api/roles](http://localhost:5161/api/roles).
-
-Xem log API:
-
-```bash
-cd backend
 docker compose logs -f api
 ```
 
-## Dừng
+API vẫn là [http://localhost:5161](http://localhost:5161). Image không chứa file `.env`. Compose đọc `.env` trên máy rồi truyền biến vào container, đồng thời đổi host database thành `sqlserver` và bật `Database__ApplyMigrations=true`.
+
+Dừng API và SQL Server, giữ dữ liệu:
 
 ```bash
 cd backend
 docker compose --profile api down
 ```
 
-Lệnh này dừng cả API và SQL Server, giữ volume dữ liệu. Thêm `-v` thì xóa database đã lưu.
+Thêm `-v` thì xóa luôn database đã lưu.
 
-## Nguyên lý hoạt động
+## Biến môi trường
 
-Backend tách hai process:
+`dotnet run` đọc `backend/.env` trước `appsettings.json`. Biến đã export trong shell không bị file này ghi đè. Trong tên biến, dấu `:` của cấu hình .NET được viết thành `__`.
 
-| Thành phần | Chạy bằng | Việc |
-| --- | --- | --- |
-| `sqlserver` | `docker compose up -d` | SQL Server 2025, cổng lấy từ `.env`, dữ liệu trong volume `warehouse-sqlserver`. |
-| `api` | profile `api` | Image build từ `Dockerfile`, lắng nghe cổng 8080 trong container, map ra `API_HTTP_PORT` trên máy. |
-
-`Dockerfile` build hai giai đoạn. Giai đoạn `sdk` restore và publish `Warehouse.Api`. Giai đoạn `aspnet` chỉ chứa bản đã publish, không chứa SDK. File `.env` không được copy vào image.
-
-Code theo Clean Architecture. Phụ thuộc đi từ ngoài vào trong.
-
-```text
-HTTP :5161
-    |
-    v
-Warehouse.Api              nhận request, nạp .env, trả HTTP
-    |
-    +--> Warehouse.Application     hợp đồng, DTO, phân trang
-    |
-    +--> Warehouse.Infrastructure  EF Core, SQL Server
-              |
-              +--> Warehouse.Application
-              |
-              +--> Warehouse.Domain       Role, User
-```
-
-`Program.cs` là chỗ ghép các lớp. Controller chỉ gọi `IRoleService` hoặc `IUserService`. Service trong Infrastructure mới mở kết nối SQL Server. Domain không biết HTTP và database.
-
-Khi container API khởi động:
-
-1. Kestrel nghe `http://+:8080`.
-2. Nếu `Database:ApplyMigrations` là true, EF áp các migration trong `Persistence/Migrations` vào `WarehouseDb`.
-3. Ứng dụng map controller và bắt đầu nhận request.
-
-## Luồng một request
-
-Ví dụ `GET /api/roles?search=quan ly&page=1&pageSize=10`. `GET /api/users` đi cùng các bước, khác service và các cột được tìm.
-
-1. Request vào cổng 5161. Nếu API chạy trên máy, Kestrel nhận trực tiếp. Nếu API chạy trong Docker, Docker chuyển cổng 5161 sang 8080 của container.
-2. ASP.NET tạo controller và tiêm service tương ứng.
-3. `Search` đọc `search`, `page`, `pageSize` rồi gọi `SearchAsync`.
-4. `PageRequest.Normalize` giữ trang 1 và 10 bản ghi. `page` nhỏ hơn 1 được đưa về 1. `pageSize` nhỏ hơn 1 được đưa về 10. `pageSize` lớn hơn 100 bị cắt còn 100.
-5. `TextSearch.ToContainsPattern` đổi `quan ly` thành `%quan ly%`, và thoát `%`, `_`, `[` để người dùng không điều khiển ký tự đại diện của `LIKE`.
-6. EF Core dịch thành SQL. `LIKE` dùng collation `Latin1_General_100_CI_AI`, nên không phân biệt hoa thường và dấu. `quan ly` khớp `Quản lý kho`. Từ khóa trống thì không lọc.
-7. Service đếm tổng số dòng, sắp xếp theo tên, rồi `Skip` và `Take` theo trang.
-8. Controller trả `200` với `items`, `page`, `pageSize`, `totalCount`, `totalPages`.
-
-`POST /api/roles` đi tới `RoleService.CreateAsync`:
-
-1. Cắt khoảng trắng. Mô tả chỉ gồm khoảng trắng được lưu `null`.
-2. Tên rỗng hoặc dài hơn 150 ký tự, hoặc mô tả dài hơn 500 ký tự, thì ném `AppException` mã 400.
-3. Tên đã có trong bảng `Roles` thì ném `AppException` mã 409.
-4. Hợp lệ thì tạo `Role` với `Guid` mới và `SaveChanges`.
-5. Controller trả `201` và header `Location` trỏ tới `GET /api/roles/{id}`.
-
-`POST /api/users` kiểm tra họ tên, email, số điện thoại và vai trò được gán. Email trùng trả 409. Vai trò không tồn tại trả 400. Xóa vai trò thì `RoleId` của người dùng về `null`, người dùng không bị xóa.
-
-Controller bắt `AppException` và trả `{ "message": "..." }` với mã trong exception. Không thấy bản ghi khi xem, sửa hoặc xóa thì trả `404`. Xóa xong trả `204`.
-
-## API
-
-| Method | Đường dẫn | Kết quả |
-| --- | --- | --- |
-| `GET` | `/api/roles?search=&page=1&pageSize=10` | Danh sách vai trò đã lọc và phân trang. |
-| `GET` | `/api/roles/{id}` | Một vai trò, hoặc 404. |
-| `POST` | `/api/roles` | Tạo vai trò. Body: `name`, `description`. |
-| `PUT` | `/api/roles/{id}` | Sửa vai trò. Body giống lúc tạo. |
-| `DELETE` | `/api/roles/{id}` | Xóa vai trò. |
-| `GET` | `/api/users?search=&page=1&pageSize=10` | Danh sách người dùng. Tìm theo tên, email, số điện thoại, tên vai trò. |
-| `GET` | `/api/users/{id}` | Một người dùng, hoặc 404. |
-| `POST` | `/api/users` | Tạo người dùng. Body: `fullName`, `email`, `phone`, `roleId`, `isActive`. |
-| `PUT` | `/api/users/{id}` | Sửa người dùng. Body giống lúc tạo. |
-| `DELETE` | `/api/users/{id}` | Xóa người dùng. |
-
-```bash
-curl -X POST http://localhost:5161/api/roles \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Quản lý kho","description":"Điều hành kho"}'
-```
-
-## Thư mục và file
-
-| File | Nhiệm vụ |
+| Biến | Việc |
 | --- | --- |
-| `Warehouse.slnx` | Solution của bốn project trong `src`. |
-| `Dockerfile` | Build và chạy API trong image `aspnet:10.0`. |
-| `.dockerignore` | Không đưa `bin`, `obj`, `.env` vào ngữ cảnh build. |
-| `.env.example` | Mẫu biến môi trường. |
-| `.env` | Giá trị thật trên máy. Không đưa vào Git. |
-| `docker-compose.yml` | Service `sqlserver` luôn có. Service `api` chỉ chạy khi bật profile `api`. Đọc biến từ `.env`. |
-| `src/Warehouse.Domain/Roles/Role.cs` | Thực thể vai trò: `Id`, `Name`, `Description`. |
-| `src/Warehouse.Domain/Users/User.cs` | Thực thể người dùng, khóa ngoại tùy chọn tới `Role`. |
-| `src/Warehouse.Application/Common/` | `AppException`, `PagedResult`, `PageRequest`. |
-| `src/Warehouse.Application/Roles/RoleContracts.cs` | DTO và `IRoleService`. |
-| `src/Warehouse.Application/Users/UserContracts.cs` | DTO và `IUserService`. |
-| `src/Warehouse.Infrastructure/DependencyInjection.cs` | Đăng ký DbContext, `RoleService`, `UserService`. |
-| `src/Warehouse.Infrastructure/Persistence/WarehouseDbContext.cs` | `DbSet` vai trò và người dùng. |
-| `src/Warehouse.Infrastructure/Persistence/TextSearch.cs` | Mẫu `LIKE` cho tìm gần đúng. |
-| `src/Warehouse.Infrastructure/Persistence/Configurations/` | Bảng, độ dài cột, index, khóa ngoại. |
-| `src/Warehouse.Infrastructure/Persistence/Migrations/` | Lịch sử schema. `AddRoles` tạo `Roles`. `AddUsers` tạo `Users`. |
-| `src/Warehouse.Infrastructure/Services/RoleService.cs` | Nghiệp vụ vai trò. |
-| `src/Warehouse.Infrastructure/Services/UserService.cs` | Nghiệp vụ người dùng. |
-| `src/Warehouse.Api/Program.cs` | Dựng host, CORS, áp migration khi được bật, map controller. |
-| `src/Warehouse.Api/EnvFile.cs` | Đọc `.env` khi chạy API trên máy. |
-| `src/Warehouse.Api/Controllers/RolesController.cs` | Endpoint `/api/roles`. |
-| `src/Warehouse.Api/Controllers/UsersController.cs` | Endpoint `/api/users`. |
-| `src/Warehouse.Api/appsettings.json` | Log và host. Chuỗi kết nối lấy từ `.env`. |
-| `src/Warehouse.Api/Properties/launchSettings.json` | Cổng 5161 và 7110 cho `dotnet run`. |
+| `MSSQL_SA_PASSWORD` | Mật khẩu user `sa`. |
+| `MSSQL_PORT` | Cổng SQL Server trên máy. Mặc định `1433`. |
+| `API_HTTP_PORT` | Cổng API khi chạy trong Docker. Mặc định `5161`. |
+| `MSSQL_DATABASE` | Tên database. Mặc định `WarehouseDb`. |
+| `ConnectionStrings__DefaultConnection` | Chuỗi kết nối khi API chạy trên máy, host là `localhost`. |
+| `Database__ApplyMigrations` | `true` thì API tự tạo bảng lúc khởi động. Trên máy để `false`. |
+| `Cors__Origins` | Origin được gọi API trực tiếp. Mặc định `http://localhost:3000`. |
+| `Jwt__Issuer` | Issuer ghi trong token. |
+| `Jwt__Audience` | Audience ghi trong token. |
+| `Jwt__SigningKey` | Khóa ký JWT, ít nhất 32 byte. Cùng khóa này dùng để mã hóa mật khẩu cho admin xem. |
+| `Jwt__ExpiresMinutes` | Số phút token còn hạn. Mặc định `480`. |
+| `Auth__SeedEmail` | Email admin tạo lúc khởi động. |
+| `Auth__SeedPassword` | Mật khẩu admin. Chỉ ghi khi tài khoản chưa có mật khẩu. |
+| `Auth__SeedName` | Họ tên admin. |

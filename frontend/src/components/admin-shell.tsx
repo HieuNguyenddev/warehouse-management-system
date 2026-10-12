@@ -4,6 +4,7 @@ import { Boxes, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Se
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { useToast } from "@/components/toast-provider";
 import { getSession, SessionUser } from "@/lib/api";
 import { logout } from "@/lib/auth";
 
@@ -16,6 +17,7 @@ const links = [
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const notify = useToast();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -28,6 +30,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   function signOut() {
     logout();
+    notify("Đã đăng xuất.");
     router.replace("/login");
   }
 
@@ -97,18 +100,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className={`py-4 ${collapsed ? "px-2" : "px-3"}`}>
           <button
             type="button"
-            onClick={signOut}
-            title={session ? `Đăng xuất ${session.fullName}` : "Đăng xuất"}
-            aria-label="Đăng xuất"
-            className={`mb-1 flex w-full items-center rounded-xl py-2.5 text-sm text-stone-300 hover:bg-white/5 ${
-              collapsed ? "justify-center px-2" : "gap-3 px-3"
-            }`}
-          >
-            <LogOut size={18} />
-            {collapsed ? null : <span className="truncate">{session?.fullName ?? "Đăng xuất"}</span>}
-          </button>
-          <button
-            type="button"
             onClick={toggleCollapsed}
             title={collapsed ? "Phóng to sidebar" : "Thu gọn sidebar"}
             aria-label={collapsed ? "Phóng to sidebar" : "Thu gọn sidebar"}
@@ -154,6 +145,28 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               />
             </label>
           </form>
+          {session ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="flex size-9 items-center justify-center rounded-full bg-brass-soft text-sm font-semibold text-ink">
+                {session.fullName.trim().charAt(0).toUpperCase()}
+              </span>
+              <div className="hidden min-w-0 sm:block">
+                <p className="truncate text-sm font-medium text-ink">{session.fullName}</p>
+                <p className="truncate text-xs text-stone-500">
+                  {session.roleName ? session.roleName : session.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={signOut}
+                title={`Đăng xuất ${session.fullName}`}
+                className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-sm text-ink hover:border-brass"
+              >
+                <LogOut size={16} />
+                <span className="hidden md:inline">Đăng xuất</span>
+              </button>
+            </div>
+          ) : null}
         </header>
         <main className="px-4 py-6 sm:px-6">{children}</main>
       </div>

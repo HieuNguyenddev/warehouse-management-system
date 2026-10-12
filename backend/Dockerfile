@@ -1,11 +1,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Warehouse.slnx ./
-COPY src/ src/
+COPY UserManagementAPI.csproj ./
+RUN dotnet restore UserManagementAPI.csproj
 
-RUN dotnet restore src/Warehouse.Api/Warehouse.Api.csproj
-RUN dotnet publish src/Warehouse.Api/Warehouse.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
+COPY . .
+RUN dotnet publish UserManagementAPI.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
@@ -15,4 +15,4 @@ COPY --from=build /app/publish .
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
-ENTRYPOINT ["dotnet", "Warehouse.Api.dll"]
+ENTRYPOINT ["dotnet", "UserManagementAPI.dll"]

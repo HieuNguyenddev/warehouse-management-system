@@ -8,6 +8,7 @@ export interface User {
   roleId: string | null;
   roleName: string | null;
   isActive: boolean;
+  hasPassword: boolean;
 }
 
 export interface PagedUsers {
@@ -49,6 +50,10 @@ export function updateUser(id: string, input: UserInput) {
     method: "PUT",
     body: JSON.stringify(toBody(input)),
   });
+}
+
+export function getUserPassword(id: string) {
+  return api<{ password: string | null }>(`/api/users/${id}/password`);
 }
 
 export function deleteUser(id: string) {

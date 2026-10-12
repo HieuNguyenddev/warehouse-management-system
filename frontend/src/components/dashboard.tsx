@@ -3,14 +3,15 @@
 import { ArrowRight, Search, Shield, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/toast-provider";
 import { Role, searchRoles } from "@/lib/roles";
 import { searchUsers } from "@/lib/users";
 
 export function Dashboard() {
+  const notify = useToast();
   const [total, setTotal] = useState<number | null>(null);
   const [userTotal, setUserTotal] = useState<number | null>(null);
   const [recent, setRecent] = useState<Role[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([searchRoles("", 1, 5), searchUsers("", 1, 1)])
@@ -19,8 +20,8 @@ export function Dashboard() {
         setRecent(roles.items);
         setUserTotal(users.totalCount);
       })
-      .catch((reason: Error) => setError(reason.message));
-  }, []);
+      .catch((reason: Error) => notify(reason.message, "error"));
+  }, [notify]);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -28,8 +29,6 @@ export function Dashboard() {
         <h1 className="text-2xl font-semibold text-ink">Tổng quan</h1>
         <p className="mt-1 text-sm text-stone-500">Theo dõi vai trò đang dùng trong kho.</p>
       </div>
-
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <article className="rounded-2xl bg-ink p-5 text-white">

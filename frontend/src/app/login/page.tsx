@@ -3,14 +3,15 @@
 import { Boxes } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { useToast } from "@/components/toast-provider";
 import { getToken } from "@/lib/api";
 import { login } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const notify = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -20,12 +21,12 @@ export default function LoginPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
     try {
       await login(email, password);
+      notify("Đã đăng nhập.");
       router.replace("/");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không đăng nhập được.");
+      notify(reason instanceof Error ? reason.message : "Không đăng nhập được.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -43,8 +44,6 @@ export default function LoginPage() {
             <p className="text-sm text-stone-500">Quản lý kho</p>
           </div>
         </div>
-
-        {error ? <p className="mt-5 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 
         <label className="mt-5 block text-sm font-medium text-ink">
           Email

@@ -3,11 +3,13 @@
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/toast-provider";
 import { Role, RoleInput, createRole, deleteRole, searchRoles, updateRole } from "@/lib/roles";
 
 const emptyForm: RoleInput = { name: "", description: "" };
 
 export function RoleManager() {
+  const notify = useToast();
   const query = useSearchParams().get("q") ?? "";
   const [keyword, setKeyword] = useState(query);
   const [applied, setApplied] = useState(query);
@@ -17,8 +19,6 @@ export function RoleManager() {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<Role | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<RoleInput>(emptyForm);
@@ -41,10 +41,9 @@ export function RoleManager() {
         setItems(result.items);
         setTotalCount(result.totalCount);
         setTotalPages(result.totalPages);
-        setError(null);
       })
       .catch((reason: Error) => {
-        if (active) setError(reason.message);
+        if (active) notify(reason.message, "error");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -80,10 +79,10 @@ export function RoleManager() {
     try {
       if (editing) {
         await updateRole(editing.id, form);
-        setNotice("Đã cập nhật vai trò.");
+        notify("Đã cập nhật vai trò.");
       } else {
         await createRole(form);
-        setNotice("Đã thêm vai trò.");
+        notify("Đã thêm vai trò.");
       }
       closeForm();
       setLoading(true);
@@ -92,7 +91,9 @@ export function RoleManager() {
       setTotalCount(result.totalCount);
       setTotalPages(result.totalPages);
     } catch (reason) {
-      setFormError(reason instanceof Error ? reason.message : "Không lưu được.");
+      const message = reason instanceof Error ? reason.message : "Không lưu được.";
+      setFormError(message);
+      notify(message, "error");
     } finally {
       setSaving(false);
       setLoading(false);
@@ -105,7 +106,7 @@ export function RoleManager() {
       await deleteRole(pendingDelete.id);
       const nextPage = items.length === 1 && page > 1 ? page - 1 : page;
       setPage(nextPage);
-      setNotice("Đã xóa vai trò.");
+      notify("Đã xóa vai trò.");
       setPendingDelete(null);
       setLoading(true);
       const result = await searchRoles(applied, nextPage, pageSize);
@@ -113,7 +114,7 @@ export function RoleManager() {
       setTotalCount(result.totalCount);
       setTotalPages(result.totalPages);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không xóa được.");
+      notify(reason instanceof Error ? reason.message : "Không xóa được.", "error");
       setPendingDelete(null);
     } finally {
       setLoading(false);
@@ -137,9 +138,6 @@ export function RoleManager() {
           <Plus size={16} /> Thêm vai trò
         </button>
       </div>
-
-      {notice ? <p className="rounded-xl bg-brass-soft px-4 py-3 text-sm text-ink">{notice}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
       <form
         className="flex flex-col gap-3 sm:flex-row"

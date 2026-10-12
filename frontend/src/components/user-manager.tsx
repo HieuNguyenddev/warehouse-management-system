@@ -1,14 +1,17 @@
 "use client";
 
-import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useToast } from "@/components/toast-provider";
+import { getSession } from "@/lib/api";
 import { Role, searchRoles } from "@/lib/roles";
-import { User, UserInput, createUser, deleteUser, searchUsers, updateUser } from "@/lib/users";
+import { User, UserInput, createUser, deleteUser, getUserPassword, searchUsers, updateUser } from "@/lib/users";
 
 const emptyForm: UserInput = { fullName: "", email: "", phone: "", roleId: "", isActive: true, password: "" };
 
 export function UserManager() {
+  const notify = useToast();
   const query = useSearchParams().get("q") ?? "";
   const [keyword, setKeyword] = useState(query);
   const [applied, setApplied] = useState(query);
@@ -19,16 +22,22 @@ export function UserManager() {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<User | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<UserInput>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [nextPassword, setNextPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNextPassword, setShowNextPassword] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState<string | null>(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<User | null>(null);
 
   useEffect(() => {
+    setIsAdmin((getSession()?.roleName ?? "").toLowerCase() === "admin");
     searchRoles("", 1, 100)
       .then((result) => setRoles(result.items))
       .catch(() => setRoles([]));
@@ -49,10 +58,9 @@ export function UserManager() {
         setItems(result.items);
         setTotalCount(result.totalCount);
         setTotalPages(result.totalPages);
-        setError(null);
       })
       .catch((reason: Error) => {
-        if (active) setError(reason.message);
+        if (active) notify(reason.message, "error");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -67,6 +75,8 @@ export function UserManager() {
     setEditing(null);
     setForm(emptyForm);
     setFormError(null);
+    setShowPassword(false);
+    resetPasswordChange();
   }
 
   function openEdit(user: User) {
@@ -81,12 +91,41 @@ export function UserManager() {
       password: "",
     });
     setFormError(null);
+    setShowPassword(false);
+    resetPasswordChange();
+    void loadCurrentPassword(user.id);
+  }
+
+  async function loadCurrentPassword(id: string) {
+    if ((getSession()?.roleName ?? "").toLowerCase() !== "admin") {
+      setCurrentPassword(null);
+      return;
+    }
+
+    try {
+      const result = await getUserPassword(id);
+      setCurrentPassword(result.password);
+      setShowCurrentPassword(false);
+    } catch (reason) {
+      setCurrentPassword(null);
+      notify(reason instanceof Error ? reason.message : "Không xem được mật khẩu.", "error");
+    }
+  }
+
+  function resetPasswordChange() {
+    setNextPassword("");
+    setConfirmPassword("");
+    setShowNextPassword(false);
   }
 
   function closeForm() {
     setCreating(false);
     setEditing(null);
     setFormError(null);
+    setShowPassword(false);
+    setCurrentPassword(null);
+    setShowCurrentPassword(false);
+    resetPasswordChange();
   }
 
   async function reload(nextPage = page) {
@@ -102,16 +141,47 @@ export function UserManager() {
     try {
       if (editing) {
         await updateUser(editing.id, form);
-        setNotice("Đã cập nhật người dùng.");
+        notify("Đã cập nhật người dùng.");
       } else {
         await createUser(form);
-        setNotice("Đã thêm người dùng.");
+        notify("Đã thêm người dùng.");
       }
       closeForm();
       setLoading(true);
       await reload();
     } catch (reason) {
-      setFormError(reason instanceof Error ? reason.message : "Không lưu được.");
+      const message = reason instanceof Error ? reason.message : "Không lưu được.";
+      setFormError(message);
+      notify(message, "error");
+    } finally {
+      setSaving(false);
+      setLoading(false);
+    }
+  }
+
+  async function changePassword() {
+    if (!editing) return;
+    if (nextPassword.length < 8 || nextPassword.length > 100) {
+      notify("Mật khẩu từ 8 đến 100 ký tự.", "error");
+      return;
+    }
+    if (nextPassword !== confirmPassword) {
+      notify("Mật khẩu nhập lại chưa khớp.", "error");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const updated = await updateUser(editing.id, { ...form, password: nextPassword });
+      setEditing({ ...editing, ...updated, hasPassword: true });
+      setCurrentPassword(nextPassword);
+      setShowCurrentPassword(true);
+      resetPasswordChange();
+      notify("Đã đặt lại mật khẩu.");
+      setLoading(true);
+      await reload();
+    } catch (reason) {
+      notify(reason instanceof Error ? reason.message : "Không đổi được mật khẩu.", "error");
     } finally {
       setSaving(false);
       setLoading(false);
@@ -124,12 +194,12 @@ export function UserManager() {
       await deleteUser(pendingDelete.id);
       const nextPage = items.length === 1 && page > 1 ? page - 1 : page;
       setPage(nextPage);
-      setNotice("Đã xóa người dùng.");
+      notify("Đã xóa người dùng.");
       setPendingDelete(null);
       setLoading(true);
       await reload(nextPage);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không xóa được.");
+      notify(reason instanceof Error ? reason.message : "Không xóa được.", "error");
       setPendingDelete(null);
     } finally {
       setLoading(false);
@@ -149,9 +219,6 @@ export function UserManager() {
           <Plus size={16} /> Thêm người dùng
         </button>
       </div>
-
-      {notice ? <p className="rounded-xl bg-brass-soft px-4 py-3 text-sm text-ink">{notice}</p> : null}
-      {error ? <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
       <form
         className="flex flex-col gap-3 sm:flex-row"
@@ -316,20 +383,95 @@ export function UserManager() {
                   className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 font-normal"
                 />
               </label>
-              <label className="text-sm font-medium text-ink">
-                Mật khẩu
-                <input
-                  type="password"
-                  required={!editing}
-                  minLength={form.password ? 8 : undefined}
-                  maxLength={100}
-                  autoComplete="new-password"
-                  value={form.password}
-                  placeholder={editing ? "Để trống nếu không đổi" : ""}
-                  onChange={(event) => setForm({ ...form, password: event.target.value })}
-                  className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 font-normal"
-                />
-              </label>
+              {editing && isAdmin ? (
+                <div className="rounded-2xl border border-line p-4">
+                  <p className="text-sm font-medium text-ink">Mật khẩu hiện tại</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      readOnly
+                      type={showCurrentPassword ? "text" : "password"}
+                      value={currentPassword ?? ""}
+                      placeholder="Chưa có mật khẩu để xem. Hãy đặt lại."
+                      className="w-full rounded-xl border border-line bg-paper px-3 py-2.5 font-normal"
+                    />
+                    <button
+                      type="button"
+                      disabled={!currentPassword}
+                      className="inline-flex items-center gap-1 rounded-xl border border-line px-3 py-2.5 text-sm text-stone-500 disabled:opacity-40"
+                      onClick={() => setShowCurrentPassword((current) => !current)}
+                    >
+                      {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {showCurrentPassword ? "Ẩn" : "Xem"}
+                    </button>
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-ink">Đặt lại mật khẩu</p>
+                  <label className="mt-2 block text-sm text-stone-500">
+                    Mật khẩu mới
+                    <span className="relative mt-1 block">
+                      <input
+                        type={showNextPassword ? "text" : "password"}
+                        minLength={nextPassword ? 8 : undefined}
+                        maxLength={100}
+                        autoComplete="new-password"
+                        value={nextPassword}
+                        onChange={(event) => setNextPassword(event.target.value)}
+                        className="w-full rounded-xl border border-line px-3 py-2.5 pr-11 font-normal text-ink"
+                      />
+                      <button
+                        type="button"
+                        aria-label={showNextPassword ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"}
+                        className="absolute top-1/2 right-3 -translate-y-1/2 text-stone-500"
+                        onClick={() => setShowNextPassword((current) => !current)}
+                      >
+                        {showNextPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </span>
+                  </label>
+                  <label className="mt-3 block text-sm text-stone-500">
+                    Nhập lại mật khẩu mới
+                    <input
+                      type={showNextPassword ? "text" : "password"}
+                      maxLength={100}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 font-normal text-ink"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void changePassword()}
+                    className="mt-3 rounded-xl border border-ink px-3 py-2 text-sm text-ink disabled:opacity-60"
+                  >
+                    Đặt lại mật khẩu
+                  </button>
+                </div>
+              ) : (
+                <label className="text-sm font-medium text-ink">
+                  Mật khẩu
+                  <span className="relative mt-1 block">
+                    <input
+                      required
+                      type={showPassword ? "text" : "password"}
+                      minLength={8}
+                      maxLength={100}
+                      autoComplete="new-password"
+                      value={form.password}
+                      onChange={(event) => setForm({ ...form, password: event.target.value })}
+                      className="w-full rounded-xl border border-line px-3 py-2.5 pr-11 font-normal"
+                    />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                      className="absolute top-1/2 right-3 -translate-y-1/2 text-stone-500"
+                      onClick={() => setShowPassword((current) => !current)}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </span>
+                </label>
+              )}
               <label className="text-sm font-medium text-ink">
                 Số điện thoại
                 <input

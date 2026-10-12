@@ -17,12 +17,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setReady(true);
   }, [router]);
 
-  return (
-    <>
-      {ready ? null : <p className="px-6 py-10 text-sm text-stone-500">Đang kiểm tra phiên đăng nhập...</p>}
-      <div hidden={!ready}>
-        <AdminShell>{children}</AdminShell>
-      </div>
-    </>
-  );
+  if (!ready) {
+    return <div className="min-h-screen">{children}</div>;
+  }
+
+  return <AdminShell>{children}</AdminShell>;
 }

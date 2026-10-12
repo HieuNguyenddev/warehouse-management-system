@@ -1,3 +1,10 @@
 .env
 **/bin/
 **/obj/
+
+wwwroot/admin/**
+!wwwroot/admin/.gitkeep
+wwwroot/uploads/**
+!wwwroot/uploads/.gitkeep
+wwwroot/models/**
+!wwwroot/models/.gitkeep

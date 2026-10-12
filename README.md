@@ -4,18 +4,23 @@ Hệ thống quản lý kho. Backend là ASP.NET Core Web API trên .NET 10 và 
 
 ## Mục lục
 
+- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
+- [Nguyên lý hoạt động](#nguyên-lý-hoạt-động)
 - [Chạy nhanh](#chạy-nhanh)
 - [Backend](backend/README.md)
-  - [Cài đặt](backend/README.md#cài-đặt)
-  - [Biến môi trường](backend/README.md#biến-môi-trường)
-  - [Chỉ SQL Server](backend/README.md#chỉ-sql-server)
-  - [API trên máy](backend/README.md#api-trên-máy)
-  - [API và SQL Server trong Docker](backend/README.md#api-và-sql-server-trong-docker)
-  - [Dừng](backend/README.md#dừng)
+  - [Cấu trúc thư mục](backend/README.md#cấu-trúc-thư-mục)
   - [Nguyên lý hoạt động](backend/README.md#nguyên-lý-hoạt-động)
-  - [Luồng một request](backend/README.md#luồng-một-request)
-  - [API](backend/README.md#api)
-  - [Thư mục và file](backend/README.md#thư-mục-và-file)
+  - [Nhiệm vụ từng thư mục và từng file](backend/README.md#nhiệm-vụ-từng-thư-mục-và-từng-file)
+  - [Auth](backend/Modules/Auth/README.md)
+  - [Roles](backend/Modules/Roles/README.md)
+  - [Users](backend/Modules/Users/README.md)
+  - [Một request đi qua đâu](backend/README.md#một-request-đi-qua-đâu)
+  - [Ba nghiệp vụ](backend/README.md#ba-nghiệp-vụ)
+  - [Danh sách API](backend/README.md#danh-sách-api)
+  - [Cài đặt](backend/README.md#cài-đặt)
+  - [Chạy API trên máy](backend/README.md#chạy-api-trên-máy)
+  - [Chạy bằng Docker](backend/README.md#chạy-bằng-docker)
+  - [Biến môi trường](backend/README.md#biến-môi-trường)
 - [Frontend](frontend/README.md)
   - [Cài đặt](frontend/README.md#cài-đặt)
   - [Biến môi trường](frontend/README.md#biến-môi-trường)
@@ -23,6 +28,41 @@ Hệ thống quản lý kho. Backend là ASP.NET Core Web API trên .NET 10 và 
   - [Chạy bằng Docker](frontend/README.md#chạy-bằng-docker)
   - [Luồng gọi API](frontend/README.md#luồng-gọi-api)
   - [Thư mục và file](frontend/README.md#thư-mục-và-file)
+
+## Cấu trúc thư mục
+
+```text
+Manage-Warehouse/
+├── README.md
+├── backend/          ASP.NET Core Web API, .NET 10, SQL Server
+└── frontend/         Next.js, gọi API qua route nội bộ
+```
+
+Cây đầy đủ của API, kèm nhiệm vụ từng file, nằm ở [backend/README.md](backend/README.md#cấu-trúc-thư-mục).
+
+## Nguyên lý hoạt động
+
+Trình duyệt chỉ nói chuyện với Next.js. Next.js chuyển tiếp sang API. API kiểm tra token, rồi đọc ghi SQL Server.
+
+```mermaid
+flowchart LR
+  browser["Trình duyệt"] --> next["Next.js :3000"]
+  next --> api["ASP.NET Core :5161"]
+  api --> sql["SQL Server WarehouseDb"]
+```
+
+Bên trong API, một request đi một chiều: controller nhận HTTP, service giữ quy tắc, repository chạy câu SQL, `WarehouseDbContext` mở bảng.
+
+```mermaid
+flowchart TD
+  http["HTTP JSON"] --> controller["Controllers"]
+  controller --> service["Services"]
+  service --> repository["Repositories"]
+  repository --> db["WarehouseDbContext"]
+  db --> sql["Roles và Users"]
+```
+
+Đăng nhập là ngoại lệ ở cửa vào: `POST /api/auth/login` không cần token. Các đường dẫn còn lại cần header `Authorization: Bearer`. Chi tiết từng bước và từng file nằm ở [backend](backend/README.md#nguyên-lý-hoạt-động).
 
 ## Chạy nhanh
 
@@ -32,8 +72,8 @@ Mỗi phần có file `.env` riêng. Lần đầu, copy từ mẫu.
 cd backend
 cp .env.example .env
 docker compose up -d
-dotnet ef database update -p src/Warehouse.Infrastructure -s src/Warehouse.Api
-dotnet run --project src/Warehouse.Api --launch-profile http
+dotnet ef database update
+dotnet run --launch-profile http
 ```
 
 ```bash
